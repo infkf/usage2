@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - gym_data:/app/data
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Vilnius
+
+volumes:
+  gym_data:

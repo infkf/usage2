@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lemon Gym Usage Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f1117; --surface: #1a1d27; --surface2: #242836; --border: #2e3348;
+  --text: #e4e6f0; --text2: #9ca3b8; --accent: #7a5cfc; --accent2: #5a3ed4;
+  --green: #22c55e; --yellow: #eab308; --red: #ef4444; --blue: #3b82f6;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh;
+}
+.container { max-width: 1200px; margin: 0 auto; padding: 20px 16px; }
+h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
+.subtitle { color: var(--text2); font-size: 0.85rem; margin-bottom: 24px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px; margin-bottom: 20px;
+}
+.card-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px; flex-wrap: wrap; gap: 8px;
+}
+.card-title { font-size: 1rem; font-weight: 600; }
+select, button {
+  background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 12px; font-size: 0.85rem; cursor: pointer;
+}
+select:focus, button:focus { outline: 1px solid var(--accent); }
+.btn-refresh {
+  background: var(--accent); color: #fff; border: none;
+  padding: 6px 16px; font-weight: 600;
+}
+.btn-refresh:hover { background: var(--accent2); }
+
+.grid { display: grid; gap: 10px; }
+.grid-2 { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.grid-3 { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+
+.club-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px; display: flex;
+  justify-content: space-between; align-items: center;
+  transition: transform 0.15s, border-color 0.2s;
+}
+.club-card:hover { transform: translateY(-1px); border-color: var(--accent); }
+.club-info { flex: 1; min-width: 0; }
+.club-name { font-weight: 600; font-size: 0.9rem; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.club-city { font-size: 0.72rem; color: var(--text2); margin-top: 2px; }
+.club-pct { font-size: 1.6rem; font-weight: 700; min-width: 64px; text-align: right; }
+.pct-low { color: var(--green); }
+.pct-mid { color: var(--yellow); }
+.pct-high { color: var(--red); }
+
+.bar-wrap { height: 4px; background: var(--border); border-radius: 2px;
+  margin-top: 6px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+
+.legend { display: flex; gap: 16px; margin-top: 10px; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; color: var(--text2); }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+canvas { max-height: 350px; }
+
+.heat-grid {
+  display: grid;
+  grid-template-columns: 70px repeat(24, 1fr);
+  gap: 2px; overflow-x: auto;
+}
+.heat-label { font-size: 0.7rem; color: var(--text2);
+  display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; }
+.heat-hour { font-size: 0.6rem; color: var(--text2); text-align: center; padding: 2px 0; }
+.heat-cell {
+  border-radius: 3px; min-height: 22px; display: flex;
+  align-items: center; justify-content: center;
+  font-size: 0.6rem; color: transparent; transition: color 0.15s;
+  cursor: default;
+}
+.heat-cell:hover { color: #fff; }
+
+footer { text-align: center; padding: 20px; color: var(--text2); font-size: 0.75rem; }
+
+@media (max-width: 600px) {
+  .grid-2 { grid-template-columns: 1fr; }
+  h1 { font-size: 1.25rem; }
+  .club-pct { font-size: 1.3rem; }
+}
+
+.spinner {
+  display: inline-block; width: 16px; height: 16px;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Lemon Gym Usage Tracker</h1>
+  <p class="subtitle">Real-time occupancy data for Lemon Gym clubs in Lithuania</p>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Current Load</span>
+      <button class="btn-refresh" id="refreshBtn" onclick="fetchCurrent()">
+        &#x21bb; Refresh
+      </button>
+    </div>
+    <div id="currentGrid" class="grid grid-2">
+      <div class="club-card"><div class="club-info"><div class="club-name"><span class="spinner"></span></div></div></div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Historical Trends (7 days)</span>
+      <select id="histSelect" onchange="fetchHistorical()">
+        <option value="">Select a club...</option>
+      </select>
+    </div>
+    <canvas id="histChart"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Popular Times Heatmap</span>
+      <select id="heatSelect" onchange="fetchHeatmap()">
+        <option value="">Select a club...</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto;">
+      <div class="heat-grid" id="heatGrid">
+        <div class="heat-label" style="grid-column:1/-1"><span class="spinner"></span> Loading...</div>
+      </div>
+    </div>
+    <div class="legend" style="margin-top:12px;">
+      <span style="font-size:0.75rem;color:var(--text2);">Busier</span>
+      <div style="display:flex;gap:2px;">
+        <div style="width:14px;height:14px;border-radius:2px;background:var(--surface2);"></div>
+        <div style="width:14px;height:14px;border-radius:2px;background:rgba(34,197,94,0.2);"></div>
+        <div style="width:14px;height:14px;border-radius:2px;background:rgba(34,197,94,0.4);"></div>
+        <div style="width:14px;height:14px;border-radius:2px;background:rgba(234,179,8,0.5);"></div>
+        <div style="width:14px;height:14px;border-radius:2px;background:rgba(239,68,68,0.5);"></div>
+        <div style="width:14px;height:14px;border-radius:2px;background:var(--red);"></div>
+      </div>
+      <span style="font-size:0.75rem;color:var(--text2);">Less busy</span>
+    </div>
+  </div>
+</div>
+
+<footer>Data sourced from lemongym.lt &middot; Updates hourly</footer>
+
+<script>
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const API_BASE = '';
+let histChart = null;
+
+function pctClass(v) {
+  if (v <= 40) return 'pct-low';
+  if (v <= 70) return 'pct-mid';
+  return 'pct-high';
+}
+
+function barColor(v) {
+  if (v <= 40) return 'var(--green)';
+  if (v <= 70) return 'var(--yellow)';
+  return 'var(--red)';
+}
+
+function heatColor(v) {
+  if (v === null || v === undefined) return 'var(--surface2)';
+  if (v <= 10) return 'rgba(34,197,94,0.15)';
+  if (v <= 25) return 'rgba(34,197,94,0.3)';
+  if (v <= 40) return 'rgba(34,197,94,0.5)';
+  if (v <= 55) return 'rgba(234,179,8,0.4)';
+  if (v <= 70) return 'rgba(234,179,8,0.6)';
+  if (v <= 85) return 'rgba(239,68,68,0.5)';
+  return 'rgba(239,68,68,0.8)';
+}
+
+async function fetchCurrent() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch(`${API_BASE}/api/current`);
+    const data = await res.json();
+    renderCurrent(data);
+    populateSelects(data);
+  } catch(e) { console.error(e); }
+  btn.disabled = false; btn.innerHTML = '&#x21bb; Refresh';
+}
+
+function renderCurrent(data) {
+  if (!data.length) {
+    document.getElementById('currentGrid').innerHTML = '<p>No data yet</p>';
+    return;
+  }
+  const sorted = [...data].sort((a,b) => a.city.localeCompare(b.city) || a.club_name.localeCompare(b.club_name));
+  let html = '';
+  for (const c of sorted) {
+    html += `
+      <div class="club-card">
+        <div class="club-info">
+          <div class="club-name" title="${c.club_name}">${c.club_name}</div>
+          <div class="club-city">${c.city}</div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${c.usage_percentage}%;background:${barColor(c.usage_percentage)}"></div></div>
+        </div>
+        <div class="club-pct ${pctClass(c.usage_percentage)}">${c.usage_percentage}%</div>
+      </div>`;
+  }
+  document.getElementById('currentGrid').innerHTML = html;
+
+  const cities = [...new Set(data.map(c => c.city))];
+  document.getElementById('legend').innerHTML = cities.map(city => {
+    const count = data.filter(c => c.city === city).length;
+    return `<div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>${city} (${count})</div>`;
+  }).join('');
+}
+
+function populateSelects(data) {
+  const names = [...new Set(data.map(c => c.club_name))].sort();
+  for (const id of ['histSelect', 'heatSelect']) {
+    const sel = document.getElementById(id);
+    const prev = sel.value;
+    const opts = '<option value="">Select a club...</option>' + names.map(n => `<option value="${n}">${n}</option>`).join('');
+    sel.innerHTML = opts;
+    if (prev && names.includes(prev)) sel.value = prev;
+  }
+}
+
+async function fetchHistorical() {
+  const club = document.getElementById('histSelect').value;
+  if (!club) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/historical/${encodeURIComponent(club)}?days=7`);
+    const data = await res.json();
+    renderHistorical(club, data);
+  } catch(e) { console.error(e); }
+}
+
+function renderHistorical(club, data) {
+  if (!data.length) return;
+  const labels = data.map(d => {
+    const dt = new Date(d.timestamp);
+    return dt.toLocaleDateString('en', {weekday:'short'}) + ' ' + dt.toLocaleTimeString('en', {hour:'2-digit',minute:'2-digit'});
+  });
+  const values = data.map(d => d.usage_percentage);
+
+  if (histChart) histChart.destroy();
+  histChart = new Chart(document.getElementById('histChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: club,
+        data: values,
+        borderColor: '#7a5cfc',
+        backgroundColor: 'rgba(122,92,252,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2,
+        pointHoverRadius: 5,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#e4e6f0' } },
+        annotation: {
+          annotations: {
+            line75: { type:'line', yMin:75, yMax:75, borderColor:'rgba(239,68,68,0.5)', borderWidth:1, borderDash:[6,3] },
+            line50: { type:'line', yMin:50, yMax:50, borderColor:'rgba(234,179,8,0.4)', borderWidth:1, borderDash:[6,3] },
+          }
+        }
+      },
+      scales: {
+        y: { min:0, max:100, ticks: { color:'#9ca3b8', callback: v => v+'%' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x: { ticks: { color:'#9ca3b8', maxRotation:45 }, grid: { color:'rgba(255,255,255,0.05)' } }
+      }
+    }
+  });
+}
+
+async function fetchHeatmap() {
+  const club = document.getElementById('heatSelect').value;
+  if (!club) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/average/${encodeURIComponent(club)}`);
+    const data = await res.json();
+    renderHeatmap(data);
+  } catch(e) { console.error(e); }
+}
+
+function renderHeatmap(data) {
+  const grid = document.getElementById('heatGrid');
+  if (!data.length) {
+    grid.innerHTML = '<div class="heat-label" style="grid-column:1/-1">No data yet. Wait for a few hours of data collection.</div>';
+    return;
+  }
+
+  const map = {};
+  for (const d of data) {
+    const key = `${d.day_of_week}-${d.hour}`;
+    map[key] = d.avg_usage;
+  }
+
+  let maxVal = 0;
+  for (const d of data) if (d.avg_usage > maxVal) maxVal = d.avg_usage;
+
+  let html = '<div class="heat-label"></div>';
+  for (let h = 0; h < 24; h++) {
+    html += `<div class="heat-hour">${h}</div>`;
+  }
+
+  for (let d = 1; d <= 7; d++) {
+    const dayIdx = d % 7;
+    html += `<div class="heat-label">${DAYS[dayIdx]}</div>`;
+    for (let h = 0; h < 24; h++) {
+      const key = `${dayIdx}-${h}`;
+      const val = map[key];
+      const display = val !== undefined ? Math.round(val) : '-';
+      const bg = val !== undefined ? heatColor(val) : 'var(--surface2)';
+      html += `<div class="heat-cell" style="background:${bg}" title="${DAYS[dayIdx]} ${h}:00 - ${display}%">${display}</div>`;
+    }
+  }
+
+  grid.innerHTML = html;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  fetchCurrent();
+  setTimeout(() => {
+    const sel = document.getElementById('heatSelect');
+    if (sel.options.length > 1) {
+      sel.selectedIndex = 1;
+      fetchHeatmap();
+    }
+  }, 1500);
+  setTimeout(() => {
+    const sel = document.getElementById('histSelect');
+    if (sel.options.length > 1 && !histChart) {
+      sel.selectedIndex = 1;
+      fetchHistorical();
+    }
+  }, 2000);
+});
+</script>
+</body>
+</html>
