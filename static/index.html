@@ -224,35 +224,55 @@ function renderCurrent(data) {
     return;
   }
   const sorted = [...data].sort((a,b) => a.city.localeCompare(b.city) || a.club_name.localeCompare(b.club_name));
-  let html = '';
+  const cityOrder = [];
+  const byCity = {};
   for (const c of sorted) {
-    html += `
-      <div class="club-card">
-        <div class="club-info">
-          <div class="club-name" title="${c.club_name}">${c.club_name}</div>
-          <div class="club-city">${c.city}</div>
-          <div class="bar-wrap"><div class="bar-fill" style="width:${c.usage_percentage}%;background:${barColor(c.usage_percentage)}"></div></div>
-        </div>
-        <div class="club-pct ${pctClass(c.usage_percentage)}">${c.usage_percentage}%</div>
-      </div>`;
+    if (!byCity[c.city]) { byCity[c.city] = []; cityOrder.push(c.city); }
+    byCity[c.city].push(c);
+  }
+  let html = '';
+  for (const city of cityOrder) {
+    html += `<div style="grid-column:1/-1;font-weight:700;font-size:0.85rem;color:var(--accent);margin-top:8px;padding-bottom:4px;border-bottom:1px solid var(--border);">${city} (${byCity[city].length})</div>`;
+    for (const c of byCity[city]) {
+      html += `
+        <div class="club-card">
+          <div class="club-info">
+            <div class="club-name" title="${c.club_name}">${c.club_name}</div>
+            <div class="bar-wrap"><div class="bar-fill" style="width:${c.usage_percentage}%;background:${barColor(c.usage_percentage)}"></div></div>
+          </div>
+          <div class="club-pct ${pctClass(c.usage_percentage)}">${c.usage_percentage}%</div>
+        </div>`;
+    }
   }
   document.getElementById('currentGrid').innerHTML = html;
 
-  const cities = [...new Set(data.map(c => c.city))];
-  document.getElementById('legend').innerHTML = cities.map(city => {
-    const count = data.filter(c => c.city === city).length;
+  document.getElementById('legend').innerHTML = cityOrder.map(city => {
+    const count = byCity[city].length;
     return `<div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>${city} (${count})</div>`;
   }).join('');
 }
 
 function populateSelects(data) {
-  const names = [...new Set(data.map(c => c.club_name))].sort();
+  const sorted = [...data].sort((a,b) => a.city.localeCompare(b.city) || a.club_name.localeCompare(b.club_name));
+  const cityOrder = [];
+  const byCity = {};
+  for (const c of sorted) {
+    if (!byCity[c.city]) { byCity[c.city] = []; cityOrder.push(c.city); }
+    byCity[c.city].push(c.club_name);
+  }
   for (const id of ['histSelect', 'heatSelect']) {
     const sel = document.getElementById(id);
     const prev = sel.value;
-    const opts = '<option value="">Select a club...</option>' + names.map(n => `<option value="${n}">${n}</option>`).join('');
+    let opts = '<option value="">Select a club...</option>';
+    for (const city of cityOrder) {
+      opts += `<optgroup label="${city}">`;
+      for (const name of byCity[city]) {
+        opts += `<option value="${name}">${name}</option>`;
+      }
+      opts += '</optgroup>';
+    }
     sel.innerHTML = opts;
-    if (prev && names.includes(prev)) sel.value = prev;
+    if (prev && [...sorted].some(c => c.club_name === prev)) sel.value = prev;
   }
 }
 
