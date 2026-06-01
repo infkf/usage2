@@ -1,5 +1,3 @@
-import os
-import tempfile
 from datetime import datetime, timezone, timedelta
 
 import pytest
@@ -129,3 +127,35 @@ class TestInsertAndQuery:
         assert latest[0]["city"] == "Vilnius"
         assert latest[0]["usage_percentage"] == 55
         assert "2025-06-01" in latest[0]["timestamp"]
+
+    def test_prune_old_records(self, tmp_db):
+        now = datetime.now(timezone.utc)
+        old = now - timedelta(days=800)
+        recent = now - timedelta(days=10)
+
+        db_module.insert_usage([
+            _make_record("OldClub", "Vilnius", "St", 10, old),
+            _make_record("RecentClub", "Kaunas", "St", 20, recent),
+            _make_record("OldClub2", "Vilnius", "St", 30, old),
+        ])
+
+        deleted = db_module.prune_old_records()
+        assert deleted == 2
+
+        all_names = db_module.get_club_names()
+        assert all_names == ["RecentClub"]
+
+    def test_prune_keeps_exactly_two_years(self, tmp_db):
+        now = datetime.now(timezone.utc)
+        exactly_729 = now - timedelta(days=729)
+        exactly_731 = now - timedelta(days=731)
+
+        db_module.insert_usage([
+            _make_record("Keep", "V", "S", 10, exactly_729),
+            _make_record("Prune", "V", "S", 20, exactly_731),
+        ])
+
+        deleted = db_module.prune_old_records()
+        assert deleted == 1
+        names = db_module.get_club_names()
+        assert names == ["Keep"]

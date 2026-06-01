@@ -1,6 +1,7 @@
 import re
 import logging
 from datetime import datetime, timezone
+import httpx
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,7 @@ def parse_html(html: str) -> list[dict]:
             records.append(
                 {
                     "club_name": club_name,
-                    "city": current_city or "Vilnius",
+                    "city": current_city or "Unknown",
                     "address": address,
                     "usage_percentage": usage,
                     "timestamp": now,
@@ -125,9 +126,7 @@ async def scrape_with_playwright() -> list[dict]:
     return records
 
 
-def scrape_with_requests() -> list[dict]:
-    import requests
-
+async def scrape_with_requests() -> list[dict]:
     logger.info("Starting requests-based scraper via API endpoint...")
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -141,41 +140,45 @@ def scrape_with_requests() -> list[dict]:
         "?pid=MTI2NQ==&bid=YWNmL2NsdWJzLW9jY3VwYW5jeQ==&rest_language=lt"
     )
 
-    try:
-        resp = requests.get(api_url, headers=headers, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
+    async with httpx.AsyncClient(timeout=30) as client:
+        try:
+            resp = await client.get(api_url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
 
-        if data.get("success") and data.get("data", {}).get("success"):
-            html_content = data["data"]["content"]
-            records = parse_html(html_content)
+            if data.get("success") and data.get("data", {}).get("success"):
+                html_content = data["data"]["content"]
+                records = parse_html(html_content)
+                if records:
+                    logger.info(f"Scraped {len(records)} clubs via API")
+                    return records
+
+            logger.warning("API response missing data, trying requests with full page...")
+        except Exception as e:
+            logger.warning(f"API endpoint failed: {e}, trying full page...")
+
+        try:
+            resp = await client.get(TARGET_URL, headers=headers)
+            resp.raise_for_status()
+            html = resp.text
+            records = parse_html(html)
             if records:
-                logger.info(f"Scraped {len(records)} clubs via API")
+                logger.info(f"Scraped {len(records)} clubs from full page")
                 return records
-
-        logger.warning("API response missing data, trying requests with full page...")
-    except Exception as e:
-        logger.warning(f"API endpoint failed: {e}, trying full page...")
-
-    try:
-        resp = requests.get(TARGET_URL, headers=headers, timeout=30)
-        resp.raise_for_status()
-        html = resp.text
-        records = parse_html(html)
-        if records:
-            logger.info(f"Scraped {len(records)} clubs from full page")
-            return records
-        logger.warning("Full page returned no records (JS-rendered content missing)")
-    except Exception as e:
-        logger.warning(f"Full page request failed: {e}")
+            logger.warning("Full page returned no records (JS-rendered content missing)")
+        except Exception as e:
+            logger.warning(f"Full page request failed: {e}")
 
     return []
 
 
 async def scrape() -> list[dict]:
-    records = scrape_with_requests()
-    if records:
-        return records
+    try:
+        records = await scrape_with_requests()
+        if records:
+            return records
+    except Exception as e:
+        logger.warning(f"scrape_with_requests raised: {e}")
 
     logger.info("Falling back to Playwright for JS-rendered content...")
     return await scrape_with_playwright()

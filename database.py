@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import os
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -37,13 +37,6 @@ class GymUsage(Base):
 def init_db():
     Base.metadata.create_all(engine)
 
-
-def get_session():
-    db = SessionLocal()
-    try:
-        return db
-    finally:
-        pass
 
 
 def insert_usage(records: list[dict]):
@@ -170,5 +163,19 @@ def get_club_names():
     try:
         results = db.query(GymUsage.club_name).distinct().all()
         return [r[0] for r in results]
+    finally:
+        db.close()
+
+
+def prune_old_records(retention_days: int = 730):
+    db = SessionLocal()
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+        deleted = db.query(GymUsage).filter(GymUsage.timestamp < cutoff).delete()
+        db.commit()
+        return deleted
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()

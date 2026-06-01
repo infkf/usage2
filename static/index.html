@@ -187,6 +187,8 @@ function heatColor(v) {
   return 'rgba(239,68,68,0.8)';
 }
 
+let firstLoad = true;
+
 async function fetchCurrent() {
   const btn = document.getElementById('refreshBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
@@ -195,8 +197,25 @@ async function fetchCurrent() {
     const data = await res.json();
     renderCurrent(data);
     populateSelects(data);
+    if (firstLoad && data.length) {
+      firstLoad = false;
+      autoSelectFirstClub();
+    }
   } catch(e) { console.error(e); }
   btn.disabled = false; btn.innerHTML = '&#x21bb; Refresh';
+}
+
+function autoSelectFirstClub() {
+  const heatSel = document.getElementById('heatSelect');
+  if (heatSel.options.length > 1) {
+    heatSel.selectedIndex = 1;
+    fetchHeatmap();
+  }
+  const histSel = document.getElementById('histSelect');
+  if (histSel.options.length > 1 && !histChart) {
+    histSel.selectedIndex = 1;
+    fetchHistorical();
+  }
 }
 
 function renderCurrent(data) {
@@ -339,20 +358,6 @@ function renderHeatmap(data) {
 
 document.addEventListener('DOMContentLoaded', () => {
   fetchCurrent();
-  setTimeout(() => {
-    const sel = document.getElementById('heatSelect');
-    if (sel.options.length > 1) {
-      sel.selectedIndex = 1;
-      fetchHeatmap();
-    }
-  }, 1500);
-  setTimeout(() => {
-    const sel = document.getElementById('histSelect');
-    if (sel.options.length > 1 && !histChart) {
-      sel.selectedIndex = 1;
-      fetchHistorical();
-    }
-  }, 2000);
 });
 </script>
 </body>

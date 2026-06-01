@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from database import init_db, insert_usage, get_latest_usage, get_historical_usage, get_average_usage, get_club_names
+from database import init_db, insert_usage, get_latest_usage, get_historical_usage, get_average_usage, get_club_names, prune_old_records
 from scraper import scrape
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -28,6 +28,13 @@ async def scrape_and_store():
     except Exception as e:
         logger.error(f"Scrape failed: {e}", exc_info=True)
 
+    try:
+        deleted = prune_old_records()
+        if deleted:
+            logger.info(f"Pruned {deleted} records older than 2 years")
+    except Exception as e:
+        logger.error(f"Prune failed: {e}", exc_info=True)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,6 +47,7 @@ async def lifespan(app: FastAPI):
         scrape_and_store,
         "cron",
         minute=0,
+        timezone="Europe/Vilnius",
         id="hourly_scrape",
         replace_existing=True,
     )
