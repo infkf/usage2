@@ -2,7 +2,7 @@ services:
   app:
     build: .
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     volumes:
       - gym_data:/app/data
     restart: unless-stopped

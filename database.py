@@ -71,21 +71,36 @@ def get_latest_usage():
 
     db = SessionLocal()
     try:
-        subquery = db.query(
-            GymUsage.club_name,
-            func.max(GymUsage.timestamp).label("max_ts"),
-        ).group_by(GymUsage.club_name).subquery()
+        # Latest hour that has any data
+        latest_hour = db.query(
+            func.max(func.strftime("%Y-%m-%dT%H:00:00", GymUsage.timestamp))
+        ).scalar()
+        if not latest_hour:
+            return []
 
         results = (
-            db.query(GymUsage)
-            .join(
-                subquery,
-                (GymUsage.club_name == subquery.c.club_name)
-                & (GymUsage.timestamp == subquery.c.max_ts),
+            db.query(
+                GymUsage.club_name,
+                GymUsage.city,
+                GymUsage.address,
+                func.avg(GymUsage.usage_percentage).label("avg_usage"),
             )
+            .filter(
+                func.strftime("%Y-%m-%dT%H:00:00", GymUsage.timestamp) == latest_hour,
+            )
+            .group_by(GymUsage.club_name, GymUsage.city, GymUsage.address)
             .all()
         )
-        return [r.as_dict() for r in results]
+        return [
+            {
+                "club_name": r.club_name,
+                "city": r.city,
+                "address": r.address,
+                "usage_percentage": round(float(r.avg_usage)),
+                "timestamp": latest_hour,
+            }
+            for r in results
+        ]
     finally:
         db.close()
 
@@ -98,15 +113,26 @@ def get_historical_usage(club_name: str, days: int = 7):
     try:
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         results = (
-            db.query(GymUsage)
+            db.query(
+                func.strftime("%Y-%m-%dT%H:00:00", GymUsage.timestamp).label("hour"),
+                func.avg(GymUsage.usage_percentage).label("avg_usage"),
+            )
             .filter(
                 GymUsage.club_name == club_name,
                 GymUsage.timestamp >= cutoff,
             )
-            .order_by(GymUsage.timestamp)
+            .group_by("hour")
+            .order_by("hour")
             .all()
         )
-        return [r.as_dict() for r in results]
+        return [
+            {
+                "club_name": club_name,
+                "usage_percentage": round(float(r.avg_usage)),
+                "timestamp": r.hour,
+            }
+            for r in results
+        ]
     finally:
         db.close()
 
