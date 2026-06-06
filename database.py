@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import os
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -104,7 +105,7 @@ def get_historical_usage(club_name: str, days: int = 7):
 
     db = SessionLocal()
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(ZoneInfo("Europe/Vilnius")).replace(tzinfo=None) - timedelta(days=days)
         results = (
             db.query(
                 func.strftime("%Y-%m-%dT%H:00:00", GymUsage.timestamp).label("hour"),

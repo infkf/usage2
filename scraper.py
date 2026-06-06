@@ -1,6 +1,7 @@
 import re
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import httpx
 from bs4 import BeautifulSoup
 
@@ -35,7 +36,7 @@ def clean_club_name(name: str) -> str:
 def parse_html(html: str) -> list[dict]:
     soup = BeautifulSoup(html, "lxml")
     records = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(ZoneInfo("Europe/Vilnius")).replace(tzinfo=None)
 
     block = soup.find("div", class_="clubs-occupancy-block")
     if not block:

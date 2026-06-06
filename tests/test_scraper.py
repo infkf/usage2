@@ -133,11 +133,14 @@ class TestParseHtml:
         assert by_name["Rišė"]["usage_percentage"] == 100
         assert by_name["Europa"]["usage_percentage"] == 42
 
-    def test_timestamps_are_utc(self):
+    def test_timestamps_are_local_time(self):
+        from zoneinfo import ZoneInfo
         records = parse_html(SAMPLE_HTML)
         for r in records:
             assert isinstance(r["timestamp"], datetime)
-            assert r["timestamp"].tzinfo == timezone.utc
+            assert r["timestamp"].tzinfo is None
+            now_local = datetime.now(ZoneInfo("Europe/Vilnius")).replace(tzinfo=None)
+            assert abs((now_local - r["timestamp"]).total_seconds()) < 10
 
     def test_required_keys(self):
         records = parse_html(SAMPLE_HTML)
